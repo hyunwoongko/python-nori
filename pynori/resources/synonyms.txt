@@ -11,3 +11,5 @@
 자연어처리,nlp,natural language processing
 개발자,developer
 텍스트마이닝,텍스트 마이닝
+삼성,samsung
+전자,electronic

@@ -295,21 +295,28 @@ class KoreanTokenizer(object):
 		#	self.count -= toFree
 
 	def compute_space_penalty(self, leftPOS, numSpaces):	
-		"""Returns the space penalty associated with the provided POS.Tag.
-		
-		Arguments:
-		----------
-		leftPOS 
-			the left part of speech of the current token.
-		
-		numSpaces 
-			the number of spaces before the current token.		
+		""" Returns the space penalty associated with the provided POS.Tag.
+		@params
+			leftPOS - the left part of speech of the current token.
+			numSpaces - the number of spaces before the current token.
+   
+		# mecab-ko-dic 의 dicrc 파일의 left-space-penality-factor 를 참조.
+		# 좌측에 공백을 포함하는 품사의 연접 비용을 늘리기 위한 설정.
 		"""
+  
 		spacePenalty = 0
 		if numSpaces > 0:
-			if leftPOS in ['JKS', 'JKC', 'JKG', 'JKO', 'JKB', 'JKV', 'JKQ', 'JX', 'JC']:
+			if leftPOS in [
+       			'JKS', 'JKC', 'JKG', 'JKO', 'JKB', 'JKV', 'JKQ', 'JX', 'JC', # pos-id 120
+				# TODO: pos-id 210
+          		]:
 				spacePenalty = 6000
-			elif leftPOS == ['E', 'J', 'VCP', 'XSA', 'XSN', 'XSV']:
+			elif leftPOS in [
+       				"EC", "EF", "EP", "ETM", "ETN", # pos-id 100
+					'XSA', 'XSN', 'XSV' # 접미사 ; pos-id 183, 184, 185
+           			'VCP', # pos-id 172; 긍정 지정사
+					# TODO: pos-id 200, 220, 221, 222, 230
+                ]:
 				spacePenalty = 3000
 		return spacePenalty
 
