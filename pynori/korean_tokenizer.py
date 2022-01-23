@@ -27,48 +27,84 @@ PATH_UNK_DICT = cfg['PATH']['UNK_DICT']
 PATH_CONN_COST = cfg['PATH']['CONN_COST']
 
 
+# For safety
+MAX_UNKNOWN_WORD_LENGTH = 1024
+MAX_BACKTRACE_GAP = 1024
+
+
 class Type(object):
-	"""Token type reflecting the original source of this token"""
+	""" Token type reflecting the original source of this token """
+ 
 	KNOWN = 'KN' # Known words from the system dictionary.
 	UNKNOWN = 'UKN' # Unknown words (heuristically segmented).
 	USER = 'US' # Known words from the user dictionary.
 
 class DcpdMode(object):
-	"""Decompound mode: this determines how the tokenizer handles"""
+	""" Decompound mode - this determines how the tokenizer handles """
+ 
 	NONE = 'NONE' # No decomposition for compound.
 	DISCARD = 'DISCARD' # Decompose compounds and discards the original form (default).
 	MIXED = 'MIXED' # Decompose compounds and keeps the original form.
 
+class Buffer(object):
+	""" Bring the input korean text """
+ 
+	# 루씬에서는 circular buffer를 사용하지만, 여기선 단순한 buffer를 사용.
+	# (참고) lucene/lucene/analysis/common/src/java/org/apache/lucene/analysis/util/RollingCharBuffer.java
+	# TODO: 아주 긴 문자열 처리에 대한 효율적인 자료구조 필요.
+
+	def set(self, in_string):
+		self.in_string = in_string
+
+	def get(self, pos):
+		if pos >= 0 and pos <= len(self.in_string)-1:
+			result = self.in_string[pos]
+		else:
+			result = -1
+		return result
+
+	def slice_get(self, start_pos, end_pos_plus1):
+		return self.in_string[start_pos:end_pos_plus1]
+
+
+
+
 
 class KoreanTokenizer(object):
-	"""Tokenizer for Korean text.
-
-	KoreanTokenizer - Split input string into several tokens.
-
-	Parameters
-	----------
-	decompound_mode : {'NONE', 'DISCARD', 'MIXED'}
-		this determines how the tokenizer handles common compound words, remaining the root(original) word or not.
+	""" Tokenizer for Korean that uses morphological analysis.
+ 
+	This tokenizer sets a number of additional attributes:
+		PartOfSpeechAttribute} containing part-of-speech.
+		ReadingAttribute} containing reading.
 	
-	infl_decompound_mode : {'NONE', 'DISCARD', 'MIXED'}
-		this determines how the tokenizer handles inflect compound words, remaining the root(original) word or not.
+ 	This tokenizer uses a (rolling) viterbi search 
+ 	to find the least cost segmentation (path) of the incoming characters.
+ 
+	@params
+		decompound_mode : {'NONE', 'DISCARD', 'MIXED'}
+			this determines how the tokenizer handles 
+   			common compound words, remaining the root(original) word or not.
+		infl_decompound_mode : {'NONE', 'DISCARD', 'MIXED'}
+			this determines how the tokenizer handles 
+   			inflect compound words, remaining the root(original) word or not.
+		output_unknown_unigrams - {'True', 'False'}
+  			true if outputs unigrams for unknown words.
+		discard_punctuation - {'True', 'False'}
+  			true if punctuation tokens should be dropped from the output.
 
-	output_unknown_unigrams : {'True', 'False'}
-		true if outputs unigrams for unknown words.
-
-	discard_punctuation : {'True', 'False'}
-		true if punctuation tokens should be dropped from the output.
-
-	Notes
-	-----
-	This tokenizer uses a rolling viterbi search to find 
-	the least cost segmentation (path) of the incoming characters.
-
+	Main methods
+		add()
+  			add the optimal token info to each position
+		increment_token()
+  			excute parse() and save token info. 
+     		until at the end of string
+		parse()
+  			while move from start to end of input string in character unit, 
+     		find the optimal path
+		backtrace()
+  			add tokens in the optimal path to the pending list, 
+     		while backtrace positions of input string
 	"""
-
-	# For safety
-	MAX_UNKNOWN_WORD_LENGTH = 1024
-	MAX_BACKTRACE_GAP = 1024
 	
 	def __init__(self, 
 				 verbose,
@@ -83,7 +119,7 @@ class KoreanTokenizer(object):
 		self.discard_punctuation = discard_punctuation
 		self.verbose = verbose
 		gc.disable()
-		self.buffer = KoreanTokenizer.Buffer()
+		self.buffer = Buffer()
 		self.character_definition = CharacterDefinition()
 		self.user_dict = UserDictionary.open(PATH_CUR+path_userdict)
 		#start_main = datetime.now()
@@ -96,6 +132,7 @@ class KoreanTokenizer(object):
 		self.reset_state()
 
 	def reset_state(self):
+		""" Initialization """
 		self.pos = 0
 		self.end = False
 		self.last_backtrace_pos = 0
@@ -107,7 +144,8 @@ class KoreanTokenizer(object):
 		self.positions.get(0).add(0, 0, -1, -1, -1, -1, Type.KNOWN, None, None, None)
 
 	def set_input(self, in_string):
-		"""Load input korean string to buffer."""
+		""" Load input korean string to buffer """
+		# NOTE: 입력 문자열을 준비하는 과정에서 예외처리도 같이 실시.
 
 		# For Exception: out of character unicode range
 		new_string = ""
@@ -117,31 +155,11 @@ class KoreanTokenizer(object):
 			else:
 				new_string += ch
 		#in_string = in_string.replace('\xa0', ' ')
-
 		self.buffer.set(new_string)
-		#self.buffer.set(in_string)
 		self.reset_state()
 
-
-	class Buffer(object):
-		"""Bring the input korean text."""
-
-		def set(self, in_string):
-			self.in_string = in_string
-
-		def get(self, pos):
-			if pos >= 0 and pos <= len(self.in_string)-1:
-				result = self.in_string[pos]
-			else:
-				result = -1
-			return result
-
-		def slice_get(self, start_pos, end_pos_plus1):
-			return self.in_string[start_pos:end_pos_plus1]
-
-
 	class Position(object):
-		"""Holds all back pointers arriving to this position."""
+		""" Holds all back pointers arriving to this position """
 
 		def __init__(self):
 			self.pos = 0
@@ -162,16 +180,19 @@ class KoreanTokenizer(object):
 			pass
 
 		def add(self, cost, lastRightID, backPos, backRPos, backIndex, backID, backDictType, backPosType, morphemes, backPosTag):
-			""" 
-			NOTE: this isn't quite a true Viterbi search,
-			because we should check if lastRightID is
-			already present here, and only update if the new
-			cost is less than the current cost, instead of
-			simply appending.  However, that will likely hurt
-			performance (usually we add a lastRightID only once),
-			and it means we actually create the full graph
-			intersection instead of a "normal" Viterbi lattice:
-			"""
+			# NOTE: this isn't quite a true Viterbi search,
+			# because we should check if lastRightID is
+			# already present here, and only update if the new
+			# cost is less than the current cost, instead of
+			# simply appending.  However, that will likely hurt
+			# performance (usually we add a lastRightID only once),
+			# and it means we actually create the full graph
+			# intersection instead of a "normal" Viterbi lattice:
+   
+			# NOTE: 일종의 path search 를 approximately 하게 진행하는 것. 
+			# 적당한 confidence가 있으면 줄기를 pruning함. 
+   			# TODO: 성능에 영향이 있을까? 속도와 품질 trade-off 존재. (품질 영향엔 미미할 듯)
+   
 			if self.count == len(self.costs):
 				self.grow()
 			self.costs.append(cost) 
@@ -179,7 +200,7 @@ class KoreanTokenizer(object):
 			self.backPos.append(backPos)
 			self.backWordPos.append(backRPos)
 			self.backIndex.append(backIndex)
-			self.backID.append(backID) # ID 대신에 그냥 surface 그대로 넣자.
+			self.backID.append(backID) # ID 대신에 그냥 surface 그대로 할당
 			self.backDictType.append(backDictType)
 			self.count += 1
 			# below: added for pynori
@@ -189,19 +210,17 @@ class KoreanTokenizer(object):
 				
 		def reset(self):
 			self.count = 0
-		
 
-	"""	
-	TODO: make generic'd version of this "circular array"?
-	It's a bit tricky because we do things to the Position
-	(eg, set .pos = N on reuse)...
-	"""
+
 	class WrappedPositionArray(object):
-		""""""
+
+		# TODO: make generic'd version of this "circular array"?
+		# It's a bit tricky because we do things to the Position
+		# (eg, set .pos = N on reuse)...
 
 		def __init__(self):
 			self.positions = []
-			for _ in range(0, 4):
+			for _ in range(0, 4): # NOTE: 초기 길이 왜 4? 어차피 필요하면 get 함수로 늘리긴 함.
 				self.positions.append(KoreanTokenizer.Position())
 		
 			# Next array index to write to in positions:
@@ -213,21 +232,22 @@ class KoreanTokenizer(object):
 
 		def reset(self):
 			self.nextWrite -= 1
+   
 			while self.count > 0:
 				if self.nextWrite == -1:
 					self.nextWrite = len(self.positions) - 1
 
 				self.positions[self.nextWrite].reset()
-				self.nextWrite -= 1 # 마이너스 increment 순서 주의
+				self.nextWrite -= 1 # NOTE: (주의) 마이너스 increment 순서 주의
 				self.count -= 1
 		
 			self.nextWrite = 0
 			self.nextPos = 0
 			self.count = 0
 		
-		""" Get Position instance for this absolute position;
-		this is allowed to be arbitrarily far "in the
-		future" but cannot be before the last freeBefore. """
+		# Get Position instance for this absolute position;
+		# this is allowed to be arbitrarily far "in the
+		# future" but cannot be before the last freeBefore.
 		def get(self, pos):
 			# pos 는 increment 하게 증가하면서 들어온다.
 
@@ -279,7 +299,7 @@ class KoreanTokenizer(object):
 				index += len(self.positions)
 			return index
 		
-		# TODO: circular buffer 사용법 확인. (참고. circular buffer 사용하지 않음.)
+		# NOTE: 여기선 circular buffer 사용하지 않음.
 		#def freeBefore(self, pos):
 		#	toFree = self.count - (self.nextPos - pos)
 		#	assert toFree >= 0
@@ -296,32 +316,36 @@ class KoreanTokenizer(object):
 
 	def compute_space_penalty(self, leftPOS, numSpaces):	
 		""" Returns the space penalty associated with the provided POS.Tag.
+
 		@params
 			leftPOS - the left part of speech of the current token.
 			numSpaces - the number of spaces before the current token.
-   
-		# mecab-ko-dic 의 dicrc 파일의 left-space-penality-factor 를 참조.
-		# 좌측에 공백을 포함하는 품사의 연접 비용을 늘리기 위한 설정.
+
+		@returns
+			space_penalty
 		"""
+
+  		# mecab-ko-dic 의 dicrc 파일의 left-space-penality-factor 를 참조.
+		# 좌측에 공백을 포함하는 품사의 연접 비용을 늘리기 위한 설정.
   
-		spacePenalty = 0
+		space_penalty = 0
 		if numSpaces > 0:
 			if leftPOS in [
        			'JKS', 'JKC', 'JKG', 'JKO', 'JKB', 'JKV', 'JKQ', 'JX', 'JC', # pos-id 120
 				# TODO: pos-id 210
           		]:
-				spacePenalty = 6000
+				space_penalty = 6000
 			elif leftPOS in [
        				"EC", "EF", "EP", "ETM", "ETN", # pos-id 100
 					'XSA', 'XSN', 'XSV' # 접미사 ; pos-id 183, 184, 185
            			'VCP', # pos-id 172; 긍정 지정사
 					# TODO: pos-id 200, 220, 221, 222, 230
                 ]:
-				spacePenalty = 3000
-		return spacePenalty
+				space_penalty = 3000
+		return space_penalty
 
 	def add(self, trie_dict, fromPosData, wordPos, endPos, wordID, type_, dict=None):
-		"""Add the optimal token info to each position."""
+		""" add the optimal token info to each position """
 
 		#leftPOS = dict.getLeftPOS(wordID)
 		#wordCost = dict.getWordCost(wordID)
@@ -368,12 +392,12 @@ class KoreanTokenizer(object):
 
 
 	def increment_token(self):
-		"""Excute parse() and save token info. until at the end of string.
+		""" excute parse() and save token info. until at the end of string """
 
-		parse() is able to return w/o producing any new tokens,
-		when the tokens it had produced were entirely punctuation.
-		So we loop here until we get a real token or we end:
-		"""
+		# parse() is able to return w/o producing any new tokens,
+		# when the tokens it had produced were entirely punctuation.
+		# So we loop here until we get a real token or we end:
+		
 		while len(self.pending) == 0:
 
 			if self.end:
@@ -402,16 +426,15 @@ class KoreanTokenizer(object):
 	
 
 	def parse(self):
-		"""While move from start to end of input string in character unit, find the optimal path.
+		""" while move from start to end of input string in character unit, find the optimal path """
 
-		Incrementally parse some more characters.  This runs
-	    the viterbi search forwards "enough" so that we
-	    generate some more tokens.  How much forward depends on
-	    the chars coming in, since some chars could cause
-	    longer-lasting ambiguity in the parsing.  Once the
-	    ambiguity is resolved, then we back trace, produce
-	    the pending tokens, and return
-		"""
+		# Incrementally parse some more characters.  This runs
+	    # the viterbi search forwards "enough" so that we
+	    # generate some more tokens.  How much forward depends on
+	    # the chars coming in, since some chars could cause
+	    # longer-lasting ambiguity in the parsing.  Once the
+	    # ambiguity is resolved, then we back trace, produce
+	    # the pending tokens, and return
 
 		if self.verbose:
 			print("\nPARSE")
@@ -441,15 +464,15 @@ class KoreanTokenizer(object):
 				continue
 
 			if self.pos > self.last_backtrace_pos and posData.count == 1 and isFrontier:
-				# 이 조건은 path 중의성이 없는 조건임. 
+				# NOTE: 이 조건은 path 중의성이 없는 조건임. 
 				# 따로 optimal path 찾을 필요가 없으므로 backtrace 실행.
 				# backtrace 실행 후 다음 index부터 다시 parse 시작.
-				# 완전한 viterbi 알고리즘이 아닌 이유.
+				# 완전한 viterbi 알고리즘이 아닌 이유임.
 
-				""" We are at a "frontier", and only one node is
-				alive, so whatever the eventual best path is must
-				come through this node.  So we can safely commit
-				to the prefix of the best path at this point: """
+				# We are at a "frontier", and only one node is
+				# alive, so whatever the eventual best path is must
+				# come through this node.  So we can safely commit
+				# to the prefix of the best path at this point:
 				self.backtrace(posData, 0)
 
 				# Re-base cost so we don't risk int overflow:
@@ -457,26 +480,27 @@ class KoreanTokenizer(object):
 				if len(self.pending) > 0:
 					return
 				else:
-					""" This means the backtrace only produced
-					punctuation tokens, so we must keep parsing	"""
+					# This means the backtrace only produced
+					# punctuation tokens, so we must keep parsing
+					pass
 
-			if self.pos - self.last_backtrace_pos >= self.MAX_BACKTRACE_GAP: # 예외처리.
-				""" Safety: if we've buffered too much, force a
-				backtrace now.  We find the least-cost partial
-				path, across all paths, backtrace from it, and
-				then prune all others.  Note that this, in
-				general, can produce the wrong result, if the
-				total best path did not in fact back trace
-				through this partial best path.  But it's the
-				best we can do... (short of not having a
-				safety!). """
+			if self.pos - self.last_backtrace_pos >= MAX_BACKTRACE_GAP: # 예외처리.
+				# Safety: if we've buffered too much, force a
+				# backtrace now.  We find the least-cost partial
+				# path, across all paths, backtrace from it, and
+				# then prune all others.  Note that this, in
+				# general, can produce the wrong result, if the
+				# total best path did not in fact back trace
+				# through this partial best path.  But it's the
+				# best we can do... (short of not having a
+				# safety!).
 
-				""" First pass: find least cost partial path so far, 
-				including ending at future positions: """
+				# First pass: find least cost partial path so far, 
+				# including ending at future positions:
 				leastIDX = -1
 				leastCost = sys.maxsize
 
-				""" TODO """
+				# TODO
 				# ...
 
 
@@ -486,11 +510,11 @@ class KoreanTokenizer(object):
 			if self.verbose:
 				print("    " + str(posData.count) + " arcs in")
 
-			""" Move to the first character that is not a whitespace.
-			The whitespaces are added as a prefix for the term that we extract,
-			this information is then used when computing the cost for the term using
-			the space penalty factor.
-			They are removed when the final tokens are generated. """
+			# Move to the first character, that is not a whitespace.
+			# The whitespaces are added as a prefix for the term that we extract,
+			# this information is then used when computing the cost for the term using
+			# the space penalty factor.
+			# They are removed when the final tokens are generated.
 
 			if ord(self.buffer.get(self.pos)) in SPACE_SEPARATOR:
 				# 보이는 것은 10진수(ex. 32)와 16진수(ex. 0x0020)가 다르지만, 프로그램 내부적으로는 integer형으로 같은 값을 가진다.
@@ -527,7 +551,7 @@ class KoreanTokenizer(object):
 						break
 
 					_, userIdRef = self.user_dict.userTokenInfo.search(self.buffer.slice_get(self.pos, posAhead + 1))
-					# 주의: [{'surface': '위메이크프라이스', 'left_id': 1781, 'right_id': 3534, 'word_cost': -100000, 'POS': 'NNG', 'POS_type': 'UnitTerm', 'analysis': '위메이크프라이스'}]
+					# NOTE: (주의) [{'surface': '위메이크프라이스', 'left_id': 1781, 'right_id': 3534, 'word_cost': -100000, 'POS': 'NNG', 'POS_type': 'UnitTerm', 'analysis': '위메이크프라이스'}]
 					# 리스트 안에 하나의 dict 들어가 있음을 주의!
 					if userIdRef is not None: # Trie 결과는 항상 None 아니면 리스트 이다.
 						maxPosAhead = posAhead
@@ -547,11 +571,9 @@ class KoreanTokenizer(object):
 					userWordMaxPosAhead = max(userWordMaxPosAhead, maxPosAhead)
 
 
-			"""
-		    TODO: we can be more aggressive about user
-		    matches?  if we are "under" a user match then don't
-		    extend KNOWN/UNKNOWN paths?
-			"""
+		    # TODO: we can be more aggressive about user
+		    # matches?  if we are "under" a user match then don't
+		    # extend KNOWN/UNKNOWN paths?
 			if anyMatches == False:
 
 				# Next, try known dictionary matches
@@ -615,7 +637,7 @@ class KoreanTokenizer(object):
 						next_hex_ch = ord(next_ch)
 						next_scriptCode = unicodedata.category(next_ch)
 
-						if unknownWordLength == self.MAX_UNKNOWN_WORD_LENGTH:
+						if unknownWordLength == MAX_UNKNOWN_WORD_LENGTH:
 							break
 
 						sameScript = (scriptCode == next_scriptCode) or (next_hex_ch in NON_SPACING_MARK)
@@ -657,11 +679,11 @@ class KoreanTokenizer(object):
 			pass
 
 	def backtrace(self, endPosData, fromIDX):
-		"""Add tokens in the optimal path to the pending list while backtrace positions of input string.
-
-		   the pending list.  The pending list is then in-reverse
-		   (last token should be returned first).
-		"""
+		""" add tokens in the optimal path to the pending list, while backtrace positions of input string. """
+  
+		# the pending list.  The pending list is then in-reverse
+		# (last token should be returned first).
+		
 
 		endPos = endPosData.pos
 
@@ -837,17 +859,17 @@ class KoreanTokenizer(object):
 			return self.unk_dict
 
 	def should_filter_token(self, token):
-		"""Delete token, where the characters are 'all' punctuation.
+		""" Delete token, where the characters are 'all' punctuation """
 
-		특수문자 토큰들을 제거하기 위한 함수 (ex. '.', '-', '#', '*', '---', '****' ...)
-		사용자 사전 특징으로 특수문자가 포함된 토큰들이 사용자 단어로 지정될 수 있음 (ex. '안녕#', '!노리', '형#태소')
+		# 특수문자 토큰들을 제거하기 위한 함수 (ex. '.', '-', '#', '*', '---', '****' ...)
+		# 사용자 사전 특징으로 특수문자가 포함된 토큰들이 사용자 단어로 지정될 수 있음 (ex. '안녕#', '!노리', '형#태소')
 
-		self.user_dict.userTokenInfo.search() 함수를 사용해서 체크한 뒤, filter 여부 결정이 필요. (이상적인 구현임)
-		(그러나) 사용자 사전에 특수문자가 포함된 토큰들이 없다면, 위 userTokenInfo.search() 함수 사용은 속도 저하를 일으킴.
-		(따라서) 단순하게, 아래와 같이 '하나라도 punctuation'이 있으면 삭제하는 방법 선택.
+		# self.user_dict.userTokenInfo.search() 함수를 사용해서 체크한 뒤, filter 여부 결정이 필요. (이상적인 구현임)
+		# (그러나) 사용자 사전에 특수문자가 포함된 토큰들이 없다면, 위 userTokenInfo.search() 함수 사용은 속도 저하를 일으킴.
+		# (따라서) 단순하게, 아래와 같이 '하나라도 punctuation'이 있으면 삭제하는 방법 선택.
 
-		사용자 사전 작성 정책에 따라서 (특수문자 부분) 이 함수의 정의가 달라져야 함.
-		"""
+		# 사용자 사전 작성 정책에 따라서 (특수문자 부분) 이 함수의 정의가 달라져야 함.
+		
 		is_punct = True
 		for ch in token.getSurfaceForm(): # 토큰 전체를 대상으로 탐색.
 			if self.is_punctuation(ch) == False: # 하나라도 punctuation이 있으면 삭제.
@@ -879,4 +901,3 @@ class KoreanTokenizer(object):
 		   hex_ch in FINAL_QUOTE_PUNCTUATION:
 			return True
 		return False
-		

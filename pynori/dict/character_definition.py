@@ -80,9 +80,9 @@ def character_category_map(ch):
 
 	# HANGUL
 	elif hex_ch in range(0xAC00, 0xD7A3+1) or \
-	     hex_ch in range(0x1100, 0x11FF+1) or \
-	     hex_ch in range(0x3130, 0x318F+1):
-	    return 'HANGUL'
+		hex_ch in range(0x1100, 0x11FF+1) or \
+		hex_ch in range(0x3130, 0x318F+1):
+		return 'HANGUL'
 
 	# HIRAGANA
 	elif hex_ch in range(0x3041, 0x309F+1):
@@ -90,20 +90,20 @@ def character_category_map(ch):
 
 	# KATAKANA
 	elif hex_ch in range(0x30A1, 0x30FF+1) or \
-	     hex_ch in range(0x31F0, 0x31FF+1) or \
-	     hex_ch == 0x30FC or \
-	     hex_ch in range(0xFF66, 0xFF9D+1) or \
-	     hex_ch in range(0xFF9E, 0xFF9F+1):
-	    return 'KATAKANA'
+		hex_ch in range(0x31F0, 0x31FF+1) or \
+		hex_ch == 0x30FC or \
+		hex_ch in range(0xFF66, 0xFF9D+1) or \
+		hex_ch in range(0xFF9E, 0xFF9F+1):
+		return 'KATAKANA'
 
 	# HANJA
 	elif hex_ch in range(0x2E80, 0x2EF3+1) or \
-		 hex_ch == 0x3005 or \
-		 hex_ch == 0x3007 or \
-		 hex_ch in range(0x3400, 0x4DB5+1) or \
-		 hex_ch in range(0x4E00, 0x9FA5+1) or \
-		 hex_ch in range(0xF900, 0xFA2D+1) or \
-		 hex_ch in range(0xFA30, 0xFA6A+1):
+		hex_ch == 0x3005 or \
+		hex_ch == 0x3007 or \
+		hex_ch in range(0x3400, 0x4DB5+1) or \
+		hex_ch in range(0x4E00, 0x9FA5+1) or \
+		hex_ch in range(0xF900, 0xFA2D+1) or \
+		hex_ch in range(0xFA30, 0xFA6A+1):
 		return 'HANJA'
 
 	# KANJI
@@ -119,46 +119,46 @@ def character_category_map(ch):
 	elif hex_ch in range(0xFF10, 0xFF19+1):
 		return 'NUMERIC'
 	elif hex_ch in range(0xFF21, 0xFF3A+1) or \
-	     hex_ch in range(0xFF41, 0xFF5A+1):
-	    return 'ALPHA'
+		hex_ch in range(0xFF41, 0xFF5A+1):
+		return 'ALPHA'
 	elif hex_ch in range(0xFF01, 0xFF0F+1) or \
-	     hex_ch in range(0xFF1A, 0xFF1F+1) or \
-	     hex_ch in range(0xFF3B, 0xFF40+1) or \
-	     hex_ch in range(0xFF5B, 0xFF65+1) or \
-	     hex_ch in range(0xFFE0, 0xFFEF+1):
-	    return 'SYMBOL'
+		hex_ch in range(0xFF1A, 0xFF1F+1) or \
+		hex_ch in range(0xFF3B, 0xFF40+1) or \
+		hex_ch in range(0xFF5B, 0xFF65+1) or \
+		hex_ch in range(0xFFE0, 0xFFEF+1):
+		return 'SYMBOL'
 
 	# OTHER SYMBOLS
 	elif hex_ch in range(0x2070, 0x209F+1) or \
-	     hex_ch in range(0x2150, 0x218F+1):
-	    return 'NUMERIC'
+		hex_ch in range(0x2150, 0x218F+1):
+		return 'NUMERIC'
 
 	elif hex_ch in range(0x2000, 0x206F+1) or \
-	     hex_ch in range(0x20A0, 0x20CF+1) or \
-	     hex_ch in range(0x20D0, 0x20FF+1) or \
-	     hex_ch in range(0x2100, 0x214F+1) or \
-	     hex_ch in range(0x2100, 0x214B+1) or \
-	     hex_ch in range(0x2190, 0x21FF+1) or \
-	     hex_ch in range(0x2200, 0x22FF+1) or \
-	     hex_ch in range(0x2300, 0x23FF+1) or \
-	     hex_ch in range(0x2460, 0x24FF+1) or \
-	     hex_ch in range(0x2501, 0x257F+1) or \
-	     hex_ch in range(0x2580, 0x259F+1) or \
-	     hex_ch in range(0x25A0, 0x25FF+1) or \
-	     hex_ch in range(0x2600, 0x26FE+1) or \
-	     hex_ch in range(0x2700, 0x27BF+1) or \
-	     hex_ch in range(0x27F0, 0x27FF+1) or \
-	     hex_ch in range(0x27C0, 0x27EF+1) or \
-	     hex_ch in range(0x2800, 0x28FF+1) or \
-	     hex_ch in range(0x2900, 0x297F+1) or \
-	     hex_ch in range(0x2B00, 0x2BFF+1) or \
-	     hex_ch in range(0x2A00, 0x2AFF+1) or \
-	     hex_ch in range(0x3300, 0x33FF+1) or \
-	     hex_ch in range(0x3200, 0x32FE+1) or \
-	     hex_ch in range(0x3000, 0x303F+1) or \
-	     hex_ch in range(0xFE30, 0xFE4F+1) or \
-	     hex_ch in range(0xFE50, 0xFE6B+1):
-	    return 'SYMBOL'
+		hex_ch in range(0x20A0, 0x20CF+1) or \
+		hex_ch in range(0x20D0, 0x20FF+1) or \
+		hex_ch in range(0x2100, 0x214F+1) or \
+		hex_ch in range(0x2100, 0x214B+1) or \
+		hex_ch in range(0x2190, 0x21FF+1) or \
+		hex_ch in range(0x2200, 0x22FF+1) or \
+		hex_ch in range(0x2300, 0x23FF+1) or \
+		hex_ch in range(0x2460, 0x24FF+1) or \
+		hex_ch in range(0x2501, 0x257F+1) or \
+		hex_ch in range(0x2580, 0x259F+1) or \
+		hex_ch in range(0x25A0, 0x25FF+1) or \
+		hex_ch in range(0x2600, 0x26FE+1) or \
+		hex_ch in range(0x2700, 0x27BF+1) or \
+		hex_ch in range(0x27F0, 0x27FF+1) or \
+		hex_ch in range(0x27C0, 0x27EF+1) or \
+		hex_ch in range(0x2800, 0x28FF+1) or \
+		hex_ch in range(0x2900, 0x297F+1) or \
+		hex_ch in range(0x2B00, 0x2BFF+1) or \
+		hex_ch in range(0x2A00, 0x2AFF+1) or \
+		hex_ch in range(0x3300, 0x33FF+1) or \
+		hex_ch in range(0x3200, 0x32FE+1) or \
+		hex_ch in range(0x3000, 0x303F+1) or \
+		hex_ch in range(0xFE30, 0xFE4F+1) or \
+		hex_ch in range(0xFE50, 0xFE6B+1):
+		return 'SYMBOL'
 
 	# ELSE
 	else:
